@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>שילוט דיגיטלי - מעברי חפיפה</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+        
+        #screen {
+            width: 1024px;
+            height: 512px;
+            background-color: #000;
+            position: relative;
+        }
+
+        /* הגדרת השכבות כך שישבו בדיוק אחת על השנייה */
+        .display-layer {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 1s ease-in-out; /* אורך אנימציית החפיפה - 1 שנייה */
+        }
+        
+        .display-layer iframe, .display-layer img {
+            width: 100%;
+            height: 100%;
+            border: none;
+            object-fit: contain; /* שומר על פרופורציות התמונה, השאר נשאר שחור */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="screen">
+        <div id="layer-1" class="display-layer" style="color: #fff;">טוען נתונים...</div>
+        <div id="layer-2" class="display-layer"></div>
+    </div>
+
+    <script>
+        let playlist = [];
+        let currentIndex = 0;
+        let activeLayerId = 'layer-1'; // עוקב אחרי השכבה שמוצגת כרגע
+
+        // *** הדבק כאן את הקישור מהאפסקריפט ***
+        const gasApiUrl = 'https://script.google.com/macros/s/AKfycbxb8UfbQjjRjYK_geuni9oZe7m9SIdBSgtHARsUx1HNVYc6xiBOTKBEkgfndogUAsaZOg/exec';
+
+        async function fetchPlaylistData(isInitialLoad = false) {
+            try {
+                const response = await fetch(gasApiUrl);
+                if (!response.ok) throw new Error('שגיאת רשת');
+                
+                const newData = await response.json();
+                
+                if (newData && newData.length > 0) {
+                    playlist = newData;
+                    
+                    if (currentIndex >= playlist.length) currentIndex = 0;
+                    
+                    if (isInitialLoad) {
+                        // בתחילה מציגים את שכבה 1 כדי להראות את הודעת הטעינה
+                        document.getElementById('layer-1').style.opacity = 1;
+                        playNext();
+                    }
+                } else if (isInitialLoad) {
+                    document.getElementById('layer-1').innerHTML = "הגיליון ריק.";
+                    document.getElementById('layer-1').style.opacity = 1;
+                }
+            } catch (error) {
+                console.error("שגיאה במשיכת נתונים:", error);
+                if (isInitialLoad) {
+                    document.getElementById('layer-1').innerHTML = `<div style="color:red;">שגיאת תקשורת.</div>`;
+                    document.getElementById('layer-1').style.opacity = 1;
+                }
+            }
+        }
+
+        function playNext() {
+            if (playlist.length === 0) return;
+
+            const currentItem = playlist[currentIndex];
+            
+            // זיהוי השכבה הבאה (זו שכרגע נסתרת)
+            const nextLayerId = activeLayerId === 'layer-1' ? 'layer-2' : 'layer-1';
+            const activeLayer = document.getElementById(activeLayerId);
+            const nextLayer = document.getElementById(nextLayerId);
+            
+            const content = currentItem['תוכן'] ? currentItem['תוכן'].trim() : '';
+            const contentType = currentItem['סוג'] ? currentItem['סוג'].trim().toLowerCase() : '';
+            const durationInSeconds = parseInt(currentItem['משך']) || 10;
+            
+            // טעינת התוכן החדש לשכבה הנסתרת
+            if (contentType === 'url') {
+                nextLayer.innerHTML = `<iframe src="${content}" sandbox="allow-scripts allow-same-origin"></iframe>`;
+            } else if (contentType === 'iframe') {
+                nextLayer.innerHTML = content;
+            } else if (contentType === 'image') {
+                nextLayer.innerHTML = `<img src="${content}" alt="תצוגה">`;
+            } else {
+                nextLayer.innerHTML = `<div style="color:white;">סוג לא מזוהה שורה ${currentIndex + 1}</div>`;
+            }
+
+            // סידור "ערימת" השכבות: השכבה החדשה עולה מעל הישנה
+            nextLayer.style.zIndex = 2;
+            activeLayer.style.zIndex = 1;
+
+            // ביצוע אנימציית החפיפה (Cross-Fade)
+            nextLayer.style.opacity = 1; // חשיפת החדש
+            activeLayer.style.opacity = 0; // העלמת הישן
+
+            // קידום האינדקס ועדכון השכבה הפעילה
+            currentIndex = (currentIndex + 1) % playlist.length;
+            activeLayerId = nextLayerId;
+
+            // תזמון השקופית הבאה
+            setTimeout(playNext, durationInSeconds * 1000);
+        }
+
+        window.onload = () => {
+            fetchPlaylistData(true);
+            setInterval(() => fetchPlaylistData(false), 300000); 
+        };
+    </script>
+</body>
+</html>
